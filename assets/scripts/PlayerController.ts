@@ -141,11 +141,15 @@ export default class PlayerController extends cc.Component {
     }
 
     private isStandingOn(otherCollider: cc.PhysicsCollider): boolean {
-        return this.node.y > otherCollider.node.y;
+        const playerBounds = this.node.getBoundingBoxToWorld();
+        const otherBounds = otherCollider.node.getBoundingBoxToWorld();
+        return playerBounds.yMin >= otherBounds.yMax - 18;
     }
 
     private isStompingEnemy(enemyCollider: cc.PhysicsCollider): boolean {
-        return this.node.y > enemyCollider.node.y + enemyCollider.node.height * 0.25 && this.body.linearVelocity.y <= 0;
+        const playerBounds = this.node.getBoundingBoxToWorld();
+        const enemyBounds = enemyCollider.node.getBoundingBoxToWorld();
+        return this.body.linearVelocity.y < -20 && playerBounds.yMin >= enemyBounds.yMax - 14;
     }
 
     private updateFacing(): void {
@@ -158,11 +162,8 @@ export default class PlayerController extends cc.Component {
     }
 
     private gameManagerCall(methodName: string, value?: number): void {
-        if (!this.gameManagerNode) {
-            return;
-        }
-
-        const gameManager = this.gameManagerNode.getComponent('GameManager');
+        const gameManagerNode = this.gameManagerNode || cc.find('GameManager') || cc.find('Canvas/GameManager');
+        const gameManager = gameManagerNode ? gameManagerNode.getComponent('GameManager') : null;
         if (gameManager && gameManager[methodName]) {
             gameManager[methodName](value);
         }

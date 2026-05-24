@@ -17,6 +17,9 @@ export default class QuestionBlock extends cc.Component {
     @property
     public score = 100;
 
+    @property
+    public showScorePopup = true;
+
     private isUsed = false;
     private originY = 0;
 
@@ -34,7 +37,7 @@ export default class QuestionBlock extends cc.Component {
             return;
         }
 
-        if (otherCollider.node.y < this.node.y) {
+        if (this.isHitFromBelow(otherCollider.node)) {
             this.activateBlock();
         }
     }
@@ -47,7 +50,11 @@ export default class QuestionBlock extends cc.Component {
         const sprite = this.getComponent(cc.Sprite);
         if (sprite && this.usedSpriteFrame) {
             sprite.spriteFrame = this.usedSpriteFrame;
+        } else {
+            this.node.color = new cc.Color(150, 150, 150);
         }
+
+        this.showPopup();
 
         cc.tween(this.node)
             .to(0.08, { y: this.originY + 14 })
@@ -66,13 +73,37 @@ export default class QuestionBlock extends cc.Component {
     }
 
     private gameManagerCall(methodName: string, value?: number): void {
-        if (!this.gameManagerNode) {
-            return;
-        }
-
-        const gameManager = this.gameManagerNode.getComponent('GameManager');
+        const gameManagerNode = this.gameManagerNode || cc.find('GameManager') || cc.find('Canvas/GameManager');
+        const gameManager = gameManagerNode ? gameManagerNode.getComponent('GameManager') : null;
         if (gameManager && gameManager[methodName]) {
             gameManager[methodName](value);
         }
+    }
+
+    private isHitFromBelow(playerNode: cc.Node): boolean {
+        const playerBounds = playerNode.getBoundingBoxToWorld();
+        const blockBounds = this.node.getBoundingBoxToWorld();
+        return playerBounds.yMax <= blockBounds.yMin + 22 && playerBounds.yMax > blockBounds.yMin - 24;
+    }
+
+    private showPopup(): void {
+        if (!this.showScorePopup) {
+            return;
+        }
+
+        const popup = new cc.Node('ScorePopup');
+        const label = popup.addComponent(cc.Label);
+        label.string = `+${this.score}`;
+        label.fontSize = 22;
+        label.lineHeight = 24;
+
+        popup.color = new cc.Color(255, 224, 64);
+        popup.parent = this.node.parent;
+        popup.setPosition(this.node.x, this.node.y + this.node.height);
+
+        cc.tween(popup)
+            .by(0.45, { y: 36, opacity: -255 })
+            .call(() => popup.destroy())
+            .start();
     }
 }

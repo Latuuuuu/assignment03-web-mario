@@ -1,5 +1,7 @@
 const { ccclass, property } = cc._decorator;
 
+const STORAGE_LAST_LEVEL_SCENE = 'webMario.lastLevelScene';
+
 @ccclass
 export default class GameManager extends cc.Component {
     @property(cc.Node)
@@ -36,6 +38,12 @@ export default class GameManager extends cc.Component {
     public startScene = 'Start';
 
     @property
+    public gameOverScene = 'GameOver';
+
+    @property
+    public levelClearScene = 'LevelClear';
+
+    @property
     public initialLife = 3;
 
     @property
@@ -69,6 +77,7 @@ export default class GameManager extends cc.Component {
     }
 
     protected start(): void {
+        cc.sys.localStorage.setItem(STORAGE_LAST_LEVEL_SCENE, cc.director.getScene().name);
         this.playBgm();
         this.updateHud();
     }
@@ -120,7 +129,7 @@ export default class GameManager extends cc.Component {
         this.updateHud();
 
         if (this.life <= 0) {
-            this.showGameOver();
+            this.loadGameOverScene();
             return;
         }
 
@@ -134,7 +143,7 @@ export default class GameManager extends cc.Component {
 
         this.isGameOver = true;
         this.playEffect(this.levelClearSfx);
-        this.scheduleOnce(() => cc.director.loadScene(this.startScene), 2);
+        this.scheduleOnce(() => cc.director.loadScene(this.levelClearScene || this.startScene), 1);
     }
 
     public restartLevel(): void {
@@ -156,12 +165,20 @@ export default class GameManager extends cc.Component {
             body.angularVelocity = 0;
         }
 
+        this.timeLeft = this.levelTime;
         this.player.position = this.playerStartPosition.clone();
         this.player.active = true;
+        this.updateHud();
     }
 
-    private showGameOver(): void {
+    private loadGameOverScene(): void {
         this.isGameOver = true;
+        cc.sys.localStorage.setItem(STORAGE_LAST_LEVEL_SCENE, cc.director.getScene().name);
+
+        if (this.gameOverScene) {
+            cc.director.loadScene(this.gameOverScene);
+            return;
+        }
 
         if (this.gameOverPanel) {
             this.gameOverPanel.active = true;
