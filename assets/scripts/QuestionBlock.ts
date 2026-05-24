@@ -20,11 +20,19 @@ export default class QuestionBlock extends cc.Component {
     @property
     public showScorePopup = true;
 
+    @property
+    public debugContact = false;
+
     private isUsed = false;
     private originY = 0;
 
     protected onLoad(): void {
         this.originY = this.node.y;
+
+        const body = this.getComponent(cc.RigidBody);
+        if (body) {
+            body.enabledContactListener = true;
+        }
 
         const collider = this.getComponent(cc.PhysicsCollider);
         if (collider) {
@@ -33,13 +41,22 @@ export default class QuestionBlock extends cc.Component {
     }
 
     public onBeginContact(contact: cc.PhysicsContact, selfCollider: cc.PhysicsCollider, otherCollider: cc.PhysicsCollider): void {
-        if (this.isUsed || otherCollider.tag !== TAG_PLAYER) {
+        if (otherCollider.tag !== TAG_PLAYER) {
+            this.debugLog(`ignored non-player tag ${otherCollider.tag}`);
             return;
         }
 
-        if (this.isHitFromBelow(otherCollider.node)) {
-            this.activateBlock();
+        if (this.isUsed) {
+            this.debugLog('ignored because block is already used');
+            return;
         }
+
+        if (this.isHitFromBelow(contact, otherCollider.node)) {
+            this.activateBlock();
+            return;
+        }
+
+        this.debugLog('player contact was not from below');
     }
 
     private activateBlock(): void {
@@ -80,10 +97,27 @@ export default class QuestionBlock extends cc.Component {
         }
     }
 
-    private isHitFromBelow(playerNode: cc.Node): boolean {
+    private isHitFromBelow(contact: cc.PhysicsContact, playerNode: cc.Node): boolean {
+        const playerBody = playerNode.getComponent(cc.RigidBody);
+        const playerVelocityY = playerBody ? playerBody.linearVelocity.y : 0;
         const playerBounds = playerNode.getBoundingBoxToWorld();
         const blockBounds = this.node.getBoundingBoxToWorld();
-        return playerBounds.yMax <= blockBounds.yMin + 22 && playerBounds.yMax > blockBounds.yMin - 24;
+        const playerCenter = playerBounds.center;
+        const blockCenter = blockBounds.center;
+        const isPlayerBelow = playerCenter.y < blockCenter.y;
+        const overlapsHorizontally = playerBounds.xMax > blockBounds.xMin + 4 && playerBounds.xMin < blockBounds.xMax - 4;
+        const isMovingUp = playerVelocityY > 10;
+        const isNearBottom = playerBounds.yMax <= blockBounds.yMin + 28;
+
+        const manifold = contact.getWorldManifold();
+        const normal = manifold && manifold.normal ? manifold.normal : cc.v2(0, 0);
+        const normalSuggestsBottomHit = Math.abs(normal.y) > 0.6 && isPlayerBelow;
+
+        this.debugLog(
+            `vy=${playerVelocityY.toFixed(1)}, below=${isPlayerBelow}, horizontal=${overlapsHorizontally}, nearBottom=${isNearBottom}, normal=(${normal.x.toFixed(2)}, ${normal.y.toFixed(2)})`
+        );
+
+        return overlapsHorizontally && isPlayerBelow && (isMovingUp || normalSuggestsBottomHit || isNearBottom);
     }
 
     private showPopup(): void {
@@ -105,5 +139,11 @@ export default class QuestionBlock extends cc.Component {
             .by(0.45, { y: 36, opacity: -255 })
             .call(() => popup.destroy())
             .start();
+    }
+
+    private debugLog(message: string): void {
+        if (this.debugContact) {
+            cc.log(`[QuestionBlock:${this.node.name}] ${message}`);
+        }
     }
 }
