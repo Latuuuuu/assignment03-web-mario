@@ -476,9 +476,7 @@
     ],
     "_srcBlendFactor": 770,
     "_dstBlendFactor": 771,
-    "_spriteFrame": {
-      "__uuid__": "d837e3ff-d662-4998-a140-c0a2f9f1f856"
-    },
+    "_spriteFrame": null,
     "_type": 0,
     "_sizeMode": 0,
     "_fillType": 0,
@@ -490,9 +488,7 @@
     "_fillStart": 0,
     "_fillRange": 0,
     "_isTrimmedMode": true,
-    "_atlas": {
-      "__uuid__": "7734b5d7-3f22-459d-9722-581341121795"
-    },
+    "_atlas": null,
     "_id": "286KchCv9FwKnqXFwGZK6o"
   },
   {
@@ -564,6 +560,17 @@
     "stompSfx": {
       "__uuid__": "eaea1b16-dd67-49ea-98d4-ae64004cc672"
     },
+    "idleFrame": {
+      "__uuid__": "034160c3-4d15-4886-9dcd-9ca21f235c56"
+    },
+    "runFrames": [],
+    "jumpFrame": {
+      "__uuid__": "7e5f9764-38a8-4e7e-b1a2-c99f88c6fa64"
+    },
+    "fallFrame": {
+      "__uuid__": "c5682907-68a3-451c-ac47-c9da90593283"
+    },
+    "animationFps": 10,
     "_id": "aanev6hTtHZb7ht+4Ksl+1"
   },
   {
@@ -1099,6 +1106,11 @@
     "speed": 80,
     "score": 100,
     "deadDelay": 0.25,
+    "walkFrames": [],
+    "deadFrame": {
+      "__uuid__": "4221effe-46af-4937-9dce-c2c84f5d77d3"
+    },
+    "animationFps": 6,
     "_id": "50lrAlWTRFM4bvjlaE8TR+"
   },
   {
