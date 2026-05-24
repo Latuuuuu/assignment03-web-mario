@@ -6,6 +6,7 @@ const TAG_ENEMY = 3;
 const TAG_QUESTION_BLOCK = 4;
 const TAG_DEATH = 5;
 const TAG_GOAL = 6;
+const TAG_POWERUP = 8;
 
 @ccclass
 export default class PlayerController extends cc.Component {
@@ -31,13 +32,55 @@ export default class PlayerController extends cc.Component {
     public idleFrame: cc.SpriteFrame = null;
 
     @property([cc.SpriteFrame])
+    public idleFrames: cc.SpriteFrame[] = [];
+
+    @property([cc.SpriteFrame])
     public runFrames: cc.SpriteFrame[] = [];
 
     @property(cc.SpriteFrame)
     public jumpFrame: cc.SpriteFrame = null;
 
+    @property([cc.SpriteFrame])
+    public jumpFrames: cc.SpriteFrame[] = [];
+
     @property(cc.SpriteFrame)
     public fallFrame: cc.SpriteFrame = null;
+
+    @property([cc.SpriteFrame])
+    public fallFrames: cc.SpriteFrame[] = [];
+
+    @property(cc.SpriteFrame)
+    public bigIdleFrame: cc.SpriteFrame = null;
+
+    @property([cc.SpriteFrame])
+    public bigIdleFrames: cc.SpriteFrame[] = [];
+
+    @property([cc.SpriteFrame])
+    public bigRunFrames: cc.SpriteFrame[] = [];
+
+    @property(cc.SpriteFrame)
+    public bigJumpFrame: cc.SpriteFrame = null;
+
+    @property([cc.SpriteFrame])
+    public bigJumpFrames: cc.SpriteFrame[] = [];
+
+    @property(cc.SpriteFrame)
+    public bigFallFrame: cc.SpriteFrame = null;
+
+    @property([cc.SpriteFrame])
+    public bigFallFrames: cc.SpriteFrame[] = [];
+
+    @property
+    public bigColliderHeight = 96;
+
+    @property
+    public bigColliderOffsetY = 24;
+
+    @property
+    public spritePixelScale = 3;
+
+    @property
+    public keepFeetOnGroundWhenGrow = true;
 
     @property
     public animationFps = 10;
@@ -48,8 +91,11 @@ export default class PlayerController extends cc.Component {
     private groundContacts = 0;
     private isFacingRight = true;
     private animationTimer = 0;
-    private runFrameIndex = 0;
+    private animationFrameIndex = 0;
     private currentAnimationState = '';
+    private isBig = false;
+    private smallColliderSize: cc.Size = null;
+    private smallColliderOffset: cc.Vec2 = null;
 
     protected onLoad(): void {
         this.body = this.getComponent(cc.RigidBody);
@@ -63,6 +109,12 @@ export default class PlayerController extends cc.Component {
         const collider = this.getComponent(cc.PhysicsCollider);
         if (collider) {
             collider.tag = TAG_PLAYER;
+        }
+
+        const boxCollider = this.getComponent(cc.PhysicsBoxCollider);
+        if (boxCollider) {
+            this.smallColliderSize = boxCollider.size.clone();
+            this.smallColliderOffset = boxCollider.offset.clone();
         }
 
         cc.systemEvent.on(cc.SystemEvent.EventType.KEY_DOWN, this.onKeyDown, this);
@@ -98,6 +150,10 @@ export default class PlayerController extends cc.Component {
                 break;
             case TAG_GOAL:
                 this.gameManagerCall('levelClear');
+                break;
+            case TAG_POWERUP:
+                this.becomeBig();
+                otherCollider.node.destroy();
                 break;
             default:
                 break;
@@ -145,15 +201,19 @@ export default class PlayerController extends cc.Component {
     }
 
     private handleEnemyContact(contact: cc.PhysicsContact, enemyCollider: cc.PhysicsCollider): void {
-        if (this.isStompingEnemy(enemyCollider)) {
+        const enemyScript = this.getEnemyScript(enemyCollider.node);
+        const canBeStomped = !enemyScript || !enemyScript.canBeStomped || enemyScript.canBeStomped();
+
+        if (canBeStomped && this.isStompingEnemy(enemyCollider)) {
             contact.disabled = true;
             this.body.linearVelocity = cc.v2(this.body.linearVelocity.x, this.stompBounceSpeed);
             this.gameManagerCall('addScore', 100);
             this.playEffect(this.stompSfx);
 
-            const enemy = enemyCollider.node.getComponent('EnemyPatrol');
-            if (enemy && enemy.die) {
-                enemy.die();
+            if (enemyScript && enemyScript.onStomp) {
+                enemyScript.onStomp(this.node);
+            } else if (enemyScript && enemyScript.die) {
+                enemyScript.die();
             }
             return;
         }
@@ -173,6 +233,12 @@ export default class PlayerController extends cc.Component {
         return this.body.linearVelocity.y < -20 && playerBounds.yMin >= enemyBounds.yMax - 14;
     }
 
+    private getEnemyScript(enemyNode: cc.Node): any {
+        return enemyNode.getComponent('TurtleEnemy') ||
+            enemyNode.getComponent('FlowerEnemy') ||
+            enemyNode.getComponent('EnemyPatrol');
+    }
+
     private updateFacing(): void {
         if (this.moveDirection === 0) {
             return;
@@ -189,45 +255,59 @@ export default class PlayerController extends cc.Component {
 
         const velocityY = this.body.linearVelocity.y;
         const isGrounded = this.groundContacts > 0;
+        const idleFrames = this.pickFrames(
+            this.isBig ? this.bigIdleFrames : this.idleFrames,
+            this.isBig ? this.bigIdleFrame : this.idleFrame,
+            this.idleFrames,
+            this.idleFrame
+        );
+        const runFrames = this.isBig && this.bigRunFrames.length > 0 ? this.bigRunFrames : this.runFrames;
+        const jumpFrames = this.pickFrames(
+            this.isBig ? this.bigJumpFrames : this.jumpFrames,
+            this.isBig ? this.bigJumpFrame : this.jumpFrame,
+            this.jumpFrames,
+            this.jumpFrame || idleFrames[0]
+        );
+        const fallFrames = this.pickFrames(
+            this.isBig ? this.bigFallFrames : this.fallFrames,
+            this.isBig ? this.bigFallFrame : this.fallFrame,
+            this.fallFrames,
+            this.fallFrame || jumpFrames[0]
+        );
 
         if (!isGrounded && velocityY > 10) {
-            this.setSingleFrameState('jump', this.jumpFrame || this.idleFrame);
+            this.playFrameAnimation('jump', jumpFrames);
             return;
         }
 
         if (!isGrounded && velocityY <= 10) {
-            this.setSingleFrameState('fall', this.fallFrame || this.jumpFrame || this.idleFrame);
+            this.playFrameAnimation('fall', fallFrames);
             return;
         }
 
-        if (this.moveDirection !== 0 && this.runFrames.length > 0) {
-            this.playRunAnimation();
+        if (this.moveDirection !== 0 && runFrames.length > 0) {
+            this.playFrameAnimation('run', runFrames);
             return;
         }
 
-        this.setSingleFrameState('idle', this.idleFrame);
+        this.playFrameAnimation('idle', idleFrames);
     }
 
-    private setSingleFrameState(state: string, frame: cc.SpriteFrame): void {
-        if (!frame) {
+    private playFrameAnimation(state: string, frames: cc.SpriteFrame[]): void {
+        if (!frames || frames.length === 0) {
             return;
         }
 
         if (this.currentAnimationState !== state) {
             this.currentAnimationState = state;
             this.animationTimer = 0;
-            this.runFrameIndex = 0;
+            this.animationFrameIndex = 0;
+            this.applySpriteFrame(frames[this.animationFrameIndex]);
+            return;
         }
 
-        this.sprite.spriteFrame = frame;
-    }
-
-    private playRunAnimation(): void {
-        if (this.currentAnimationState !== 'run') {
-            this.currentAnimationState = 'run';
-            this.animationTimer = 0;
-            this.runFrameIndex = 0;
-            this.sprite.spriteFrame = this.runFrames[this.runFrameIndex];
+        if (frames.length === 1) {
+            this.applySpriteFrame(frames[0]);
             return;
         }
 
@@ -238,8 +318,77 @@ export default class PlayerController extends cc.Component {
         }
 
         this.animationTimer -= frameDuration;
-        this.runFrameIndex = (this.runFrameIndex + 1) % this.runFrames.length;
-        this.sprite.spriteFrame = this.runFrames[this.runFrameIndex];
+        this.animationFrameIndex = (this.animationFrameIndex + 1) % frames.length;
+        this.applySpriteFrame(frames[this.animationFrameIndex]);
+    }
+
+    private pickFrames(primaryFrames: cc.SpriteFrame[], primaryFrame: cc.SpriteFrame, fallbackFrames: cc.SpriteFrame[], fallbackFrame: cc.SpriteFrame): cc.SpriteFrame[] {
+        if (primaryFrames && primaryFrames.length > 0) {
+            return primaryFrames;
+        }
+
+        if (primaryFrame) {
+            return [primaryFrame];
+        }
+
+        if (fallbackFrames && fallbackFrames.length > 0) {
+            return fallbackFrames;
+        }
+
+        return fallbackFrame ? [fallbackFrame] : [];
+    }
+
+    private applySpriteFrame(frame: cc.SpriteFrame): void {
+        this.sprite.spriteFrame = frame;
+
+        const originalSize = frame.getOriginalSize();
+        this.node.setContentSize(
+            originalSize.width * this.spritePixelScale,
+            originalSize.height * this.spritePixelScale
+        );
+    }
+
+    public becomeBig(): void {
+        if (this.isBig) {
+            return;
+        }
+
+        const oldHeight = this.node.height;
+        this.isBig = true;
+        this.currentAnimationState = '';
+        this.updateAnimation();
+        this.liftAfterGrow(oldHeight);
+        this.updateBigCollider();
+        this.playGrowEffect();
+    }
+
+    private liftAfterGrow(oldHeight: number): void {
+        if (!this.keepFeetOnGroundWhenGrow) {
+            return;
+        }
+
+        const heightDelta = this.node.height - oldHeight;
+        if (heightDelta > 0) {
+            this.node.y += heightDelta * (1 - this.node.anchorY);
+        }
+    }
+
+    private updateBigCollider(): void {
+        const collider = this.getComponent(cc.PhysicsBoxCollider);
+        if (!collider) {
+            return;
+        }
+
+        collider.size = cc.size(collider.size.width, this.bigColliderHeight);
+        collider.offset = cc.v2(collider.offset.x, this.bigColliderOffsetY);
+        collider.apply();
+    }
+
+    private playGrowEffect(): void {
+        cc.tween(this.node)
+            .to(0.08, { scaleY: Math.abs(this.node.scaleY) * 1.15 * (this.node.scaleY < 0 ? -1 : 1) })
+            .to(0.08, { scaleY: Math.abs(this.node.scaleY) * (this.node.scaleY < 0 ? -1 : 1) })
+            .start();
     }
 
     private gameManagerCall(methodName: string, value?: number): void {

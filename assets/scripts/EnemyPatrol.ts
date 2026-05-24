@@ -20,6 +20,9 @@ export default class EnemyPatrol extends cc.Component {
     @property(cc.SpriteFrame)
     public deadFrame: cc.SpriteFrame = null;
 
+    @property([cc.SpriteFrame])
+    public deadFrames: cc.SpriteFrame[] = [];
+
     @property
     public animationFps = 6;
 
@@ -29,6 +32,7 @@ export default class EnemyPatrol extends cc.Component {
     private isDead = false;
     private animationTimer = 0;
     private walkFrameIndex = 0;
+    private deadFrameIndex = 0;
 
     protected onLoad(): void {
         this.body = this.getComponent(cc.RigidBody);
@@ -81,14 +85,18 @@ export default class EnemyPatrol extends cc.Component {
             collider.enabled = false;
         }
 
-        if (this.sprite && this.deadFrame) {
+        if (this.deadFrames.length > 0) {
+            this.playDeadAnimation();
+        } else if (this.sprite && this.deadFrame) {
             this.sprite.spriteFrame = this.deadFrame;
         }
 
-        this.node.scaleY = 0.45;
-        this.scheduleOnce(() => {
-            this.node.destroy();
-        }, this.deadDelay);
+        if (this.deadFrames.length === 0) {
+            this.node.scaleY = 0.45;
+            this.scheduleOnce(() => {
+                this.node.destroy();
+            }, this.deadDelay);
+        }
     }
 
     private turnAround(): void {
@@ -110,5 +118,26 @@ export default class EnemyPatrol extends cc.Component {
         this.animationTimer -= frameDuration;
         this.walkFrameIndex = (this.walkFrameIndex + 1) % this.walkFrames.length;
         this.sprite.spriteFrame = this.walkFrames[this.walkFrameIndex];
+    }
+
+    private playDeadAnimation(): void {
+        if (!this.sprite) {
+            this.node.destroy();
+            return;
+        }
+
+        this.deadFrameIndex = 0;
+        this.sprite.spriteFrame = this.deadFrames[this.deadFrameIndex];
+        this.schedule(this.advanceDeadFrame, 1 / Math.max(1, this.animationFps), this.deadFrames.length - 1, 0);
+        this.scheduleOnce(() => this.node.destroy(), this.deadFrames.length / Math.max(1, this.animationFps));
+    }
+
+    private advanceDeadFrame(): void {
+        if (!this.sprite || this.deadFrames.length === 0) {
+            return;
+        }
+
+        this.deadFrameIndex = Math.min(this.deadFrameIndex + 1, this.deadFrames.length - 1);
+        this.sprite.spriteFrame = this.deadFrames[this.deadFrameIndex];
     }
 }
