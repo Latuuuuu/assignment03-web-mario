@@ -401,7 +401,7 @@
     },
     "_angularVelocity": 0,
     "_fixedRotation": false,
-    "enabledContactListener": false,
+    "enabledContactListener": true,
     "bullet": false,
     "awakeOnLoad": true,
     "_id": ""
@@ -443,6 +443,10 @@
     "speed": 80,
     "score": 100,
     "deadDelay": 0.25,
+    "walkFrames": [],
+    "deadFrame": null,
+    "deadFrames": [],
+    "animationFps": 6,
     "_id": ""
   },
   {

@@ -1,6 +1,7 @@
 const { ccclass, property } = cc._decorator;
 
 const TAG_POWERUP = 8;
+const TAG_PLAYER = 2;
 const TAG_WALL = 7;
 
 @ccclass
@@ -17,6 +18,7 @@ export default class SuperMushroom extends cc.Component {
     private body: cc.RigidBody = null;
     private direction = 1;
     private isRising = true;
+    private isConsumed = false;
 
     protected onLoad(): void {
         this.body = this.getComponent(cc.RigidBody);
@@ -48,7 +50,7 @@ export default class SuperMushroom extends cc.Component {
     }
 
     protected update(): void {
-        if (!this.body || this.isRising) {
+        if (!this.body || this.isRising || this.isConsumed) {
             return;
         }
 
@@ -56,8 +58,43 @@ export default class SuperMushroom extends cc.Component {
     }
 
     public onBeginContact(contact: cc.PhysicsContact, selfCollider: cc.PhysicsCollider, otherCollider: cc.PhysicsCollider): void {
+        if (this.isConsumed) {
+            return;
+        }
+
+        if (otherCollider.tag === TAG_PLAYER) {
+            this.consumeByPlayer(otherCollider.node);
+            return;
+        }
+
         if (otherCollider.tag === TAG_WALL) {
             this.direction *= -1;
         }
+    }
+
+    public consumeByPlayer(playerNode: cc.Node): void {
+        this.isConsumed = true;
+        cc.Tween.stopAllByTarget(this.node);
+        this.unscheduleAllCallbacks();
+
+        const collider = this.getComponent(cc.PhysicsCollider);
+        if (collider) {
+            collider.enabled = false;
+        }
+
+        if (this.body) {
+            this.body.linearVelocity = cc.v2(0, 0);
+            this.body.gravityScale = 0;
+            this.body.enabled = false;
+        }
+
+        this.node.active = false;
+
+        const player = playerNode.getComponent('PlayerController');
+        if (player && player.becomeBig) {
+            player.becomeBig();
+        }
+
+        this.node.destroy();
     }
 }

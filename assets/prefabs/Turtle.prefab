@@ -175,7 +175,7 @@
       "__id__": 1
     },
     "_enabled": true,
-    "walkSpeed": 70,
+    "walkSpeed": 80,
     "shellSpeed": 260,
     "wakeDelay": 5,
     "walkFrames": [
@@ -206,6 +206,9 @@
       "__uuid__": "37ad6496-a731-4bbe-8de6-2da095f5047f"
     },
     "animationFps": 6,
+    "forceDynamicBody": true,
+    "debugMovement": false,
+    "driveByPosition": true,
     "_id": ""
   },
   {

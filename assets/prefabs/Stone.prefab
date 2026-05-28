@@ -13,7 +13,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "Ground_01",
+    "_name": "Stone",
     "_objFlags": 0,
     "_parent": null,
     "_children": [],
@@ -27,10 +27,13 @@
       },
       {
         "__id__": 4
+      },
+      {
+        "__id__": 5
       }
     ],
     "_prefab": {
-      "__id__": 5
+      "__id__": 6
     },
     "_opacity": 255,
     "_color": {
@@ -55,7 +58,7 @@
       "ctor": "Float64Array",
       "array": [
         0,
-        -230,
+        0,
         0,
         0,
         0,
@@ -95,7 +98,7 @@
     "_srcBlendFactor": 770,
     "_dstBlendFactor": 771,
     "_spriteFrame": {
-      "__uuid__": "121ced5d-bca1-41c2-8c45-89f02f2d049a"
+      "__uuid__": "7e758c9f-858a-4239-9303-0e32b9ba6d21"
     },
     "_type": 0,
     "_sizeMode": 0,
@@ -133,7 +136,7 @@
     },
     "_angularVelocity": 0,
     "_fixedRotation": false,
-    "enabledContactListener": false,
+    "enabledContactListener": true,
     "bullet": false,
     "awakeOnLoad": true,
     "_id": ""
@@ -162,6 +165,17 @@
       "width": 48,
       "height": 48
     },
+    "_id": ""
+  },
+  {
+    "__type__": "f01c1xL/j9ICai63dtB4kC8",
+    "_name": "",
+    "_objFlags": 0,
+    "node": {
+      "__id__": 1
+    },
+    "_enabled": true,
+    "breakDelay": 0,
     "_id": ""
   },
   {

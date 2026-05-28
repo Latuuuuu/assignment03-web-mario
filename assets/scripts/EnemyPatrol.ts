@@ -1,6 +1,8 @@
 const { ccclass, property } = cc._decorator;
 
+const TAG_GROUND = 1;
 const TAG_ENEMY = 3;
+const TAG_QUESTION_BLOCK = 4;
 const TAG_WALL = 7;
 
 @ccclass
@@ -33,6 +35,7 @@ export default class EnemyPatrol extends cc.Component {
     private animationTimer = 0;
     private walkFrameIndex = 0;
     private deadFrameIndex = 0;
+    private turnCooldown = 0;
 
     protected onLoad(): void {
         this.body = this.getComponent(cc.RigidBody);
@@ -49,11 +52,12 @@ export default class EnemyPatrol extends cc.Component {
         }
     }
 
-    protected update(): void {
+    protected update(dt: number): void {
         if (!this.body || this.isDead) {
             return;
         }
 
+        this.turnCooldown = Math.max(0, this.turnCooldown - dt);
         this.body.linearVelocity = cc.v2(this.direction * this.speed, this.body.linearVelocity.y);
         this.updateWalkAnimation();
     }
@@ -63,7 +67,11 @@ export default class EnemyPatrol extends cc.Component {
             return;
         }
 
-        if (otherCollider.tag === TAG_WALL) {
+        if (
+            otherCollider.tag === TAG_WALL ||
+            otherCollider.tag === TAG_ENEMY ||
+            this.isSideBlocked(contact, selfCollider, otherCollider)
+        ) {
             this.turnAround();
         }
     }
@@ -100,8 +108,36 @@ export default class EnemyPatrol extends cc.Component {
     }
 
     private turnAround(): void {
+        if (this.turnCooldown > 0) {
+            return;
+        }
+
+        this.turnCooldown = 0.12;
         this.direction *= -1;
         this.node.scaleX = Math.abs(this.node.scaleX) * (this.direction < 0 ? 1 : -1);
+    }
+
+    private isSideBlocked(contact: cc.PhysicsContact, selfCollider: cc.PhysicsCollider, otherCollider: cc.PhysicsCollider): boolean {
+        if (otherCollider.tag !== TAG_GROUND && otherCollider.tag !== TAG_QUESTION_BLOCK) {
+            return false;
+        }
+
+        const worldManifold = contact.getWorldManifold();
+        if (worldManifold && worldManifold.normal) {
+            const normalX = selfCollider === contact.colliderA ? worldManifold.normal.x : -worldManifold.normal.x;
+            return Math.abs(normalX) > 0.55;
+        }
+
+        const selfBounds = this.node.getBoundingBoxToWorld();
+        const otherBounds = otherCollider.node.getBoundingBoxToWorld();
+        const overlapsVertically = selfBounds.yMin < otherBounds.yMax - 4 && selfBounds.yMax > otherBounds.yMin + 4;
+        if (!overlapsVertically) {
+            return false;
+        }
+
+        return this.direction > 0
+            ? selfBounds.xMax <= otherBounds.xMin + 8
+            : selfBounds.xMin >= otherBounds.xMax - 8;
     }
 
     private updateWalkAnimation(): void {
