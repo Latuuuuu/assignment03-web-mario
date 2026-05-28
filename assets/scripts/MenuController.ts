@@ -1,4 +1,9 @@
+import { fetchLeaderboard, fetchUserBestRecord, LeaderboardEntry } from "./FirebaseManager";
+
 const { ccclass, property } = cc._decorator;
+
+const STORAGE_BEST_SCORE_PREFIX = 'webMario.bestScore.';
+const STORAGE_BEST_TIME_PREFIX = 'webMario.bestClearTime.';
 
 @ccclass
 export default class MenuController extends cc.Component {
@@ -30,6 +35,27 @@ export default class MenuController extends cc.Component {
     @property(cc.Node)
     public titleNode: cc.Node = null;
 
+    @property(cc.Label)
+    public selectedBestLabel: cc.Label = null;
+
+    @property(cc.Label)
+    public level1BestLabel: cc.Label = null;
+
+    @property(cc.Label)
+    public level2BestLabel: cc.Label = null;
+
+    @property(cc.Label)
+    public selectedLeaderboardLabel: cc.Label = null;
+
+    @property(cc.Label)
+    public level1LeaderboardLabel: cc.Label = null;
+
+    @property(cc.Label)
+    public level2LeaderboardLabel: cc.Label = null;
+
+    @property
+    public leaderboardLimit = 5;
+
     @property(cc.Node)
     public level1SelectedFrame: cc.Node = null;
 
@@ -45,6 +71,7 @@ export default class MenuController extends cc.Component {
     private bgmId = -1;
     private isTransitioning = false;
     private selectedLevel = 1;
+    private leaderboardRequestId = 0;
 
     protected onLoad(): void {
         cc.systemEvent.on(cc.SystemEvent.EventType.KEY_DOWN, this.onKeyDown, this);
@@ -57,6 +84,8 @@ export default class MenuController extends cc.Component {
         this.playBgm();
         this.playTitleIdleAnimation();
         this.updateLevelSelection();
+        this.updateBestRecordLabels();
+        this.loadCloudRecords();
     }
 
     protected onDestroy(): void {
@@ -112,6 +141,8 @@ export default class MenuController extends cc.Component {
         this.selectedLevel = level;
         this.playConfirmSfx();
         this.updateLevelSelection();
+        this.updateBestRecordLabels();
+        this.loadCloudRecords();
     }
 
     private updateLevelSelection(): void {
@@ -139,6 +170,170 @@ export default class MenuController extends cc.Component {
                     .start();
             }
         }
+    }
+
+    private updateBestRecordLabels(): void {
+        this.setBestRecordLabel(this.level1BestLabel, 'LEVEL 1', this.level1Scene);
+        this.setBestRecordLabel(this.level2BestLabel, 'LEVEL 2', this.level2Scene);
+
+        if (this.selectedBestLabel) {
+            const sceneName = this.selectedLevel === 1 ? this.level1Scene : this.level2Scene;
+            const title = this.selectedLevel === 1 ? 'LEVEL 1' : 'LEVEL 2';
+            this.setBestRecordLabel(this.selectedBestLabel, title, sceneName);
+        }
+
+        this.setLeaderboardLoading(this.level1LeaderboardLabel, 'LEVEL 1');
+        this.setLeaderboardLoading(this.level2LeaderboardLabel, 'LEVEL 2');
+
+        if (this.selectedLeaderboardLabel) {
+            const title = this.selectedLevel === 1 ? 'LEVEL 1' : 'LEVEL 2';
+            this.setLeaderboardLoading(this.selectedLeaderboardLabel, title);
+        }
+    }
+
+    private setBestRecordLabel(label: cc.Label, title: string, sceneName: string): void {
+        if (!label) {
+            return;
+        }
+
+        const record = this.getBestRecord(sceneName);
+        if (!record.hasScore && !record.hasTime) {
+            label.string = `${title}\nBEST SCORE ------\nBEST TIME --`;
+            return;
+        }
+
+        label.string = `${title}\nBEST SCORE ${this.padNumber(record.score, 6)}\nBEST TIME ${this.formatTime(record.clearTime)}`;
+    }
+
+    private getBestRecord(sceneName: string): { score: number; clearTime: number; hasScore: boolean; hasTime: boolean } {
+        const score = this.readStoredNumber(`${STORAGE_BEST_SCORE_PREFIX}${sceneName}`, 0);
+        const clearTime = this.readStoredNumber(`${STORAGE_BEST_TIME_PREFIX}${sceneName}`, -1);
+
+        return {
+            score,
+            clearTime,
+            hasScore: score > 0,
+            hasTime: clearTime >= 0,
+        };
+    }
+
+    private readStoredNumber(key: string, fallback: number): number {
+        const rawValue = cc.sys.localStorage.getItem(key);
+        if (rawValue === null || rawValue === undefined || rawValue === '') {
+            return fallback;
+        }
+
+        const value = Number(rawValue);
+        return isNaN(value) ? fallback : value;
+    }
+
+    private padNumber(value: number, digits: number): string {
+        let text = String(Math.max(0, Math.floor(value)));
+        while (text.length < digits) {
+            text = `0${text}`;
+        }
+        return text;
+    }
+
+    private formatTime(seconds: number): string {
+        if (seconds < 0) {
+            return '--';
+        }
+
+        return `${this.padNumber(seconds, 3)}s`;
+    }
+
+    private loadCloudRecords(): void {
+        const requestId = ++this.leaderboardRequestId;
+        const selectedSceneName = this.selectedLevel === 1 ? this.level1Scene : this.level2Scene;
+        const selectedTitle = this.selectedLevel === 1 ? 'LEVEL 1' : 'LEVEL 2';
+
+        this.loadCloudBestRecord(this.level1BestLabel, 'LEVEL 1', this.level1Scene);
+        this.loadCloudBestRecord(this.level2BestLabel, 'LEVEL 2', this.level2Scene);
+        this.loadCloudBestRecord(this.selectedBestLabel, selectedTitle, selectedSceneName);
+        this.loadLeaderboardLabel(this.level1LeaderboardLabel, 'LEVEL 1', this.level1Scene, requestId, false);
+        this.loadLeaderboardLabel(this.level2LeaderboardLabel, 'LEVEL 2', this.level2Scene, requestId, false);
+        this.loadLeaderboardLabel(this.selectedLeaderboardLabel, selectedTitle, selectedSceneName, requestId, true);
+    }
+
+    private loadCloudBestRecord(label: cc.Label, title: string, sceneName: string): void {
+        if (!label || !sceneName) {
+            return;
+        }
+
+        fetchUserBestRecord(sceneName)
+            .then((record) => {
+                if (!record) {
+                    return;
+                }
+
+                this.saveBestRecordToLocal(record.levelName, record.bestScore, record.bestClearTime);
+                this.setBestRecordLabel(label, title, sceneName);
+            })
+            .catch((error) => cc.warn(`[MenuController] Failed to load cloud best record: ${error && error.message ? error.message : error}`));
+    }
+
+    private loadLeaderboardLabel(label: cc.Label, title: string, sceneName: string, requestId: number, isSelectedLabel: boolean): void {
+        if (!label || !sceneName) {
+            return;
+        }
+
+        fetchLeaderboard(sceneName, this.leaderboardLimit)
+            .then((entries) => {
+                if (isSelectedLabel && requestId !== this.leaderboardRequestId) {
+                    return;
+                }
+
+                this.setLeaderboardLabel(label, title, entries);
+            })
+            .catch((error) => {
+                cc.warn(`[MenuController] Failed to load leaderboard: ${error && error.message ? error.message : error}`);
+                label.string = `${title} RANKING\nOFFLINE`;
+            });
+    }
+
+    private setLeaderboardLoading(label: cc.Label, title: string): void {
+        if (label) {
+            label.string = `${title} RANKING\nLOADING...`;
+        }
+    }
+
+    private setLeaderboardLabel(label: cc.Label, title: string, entries: LeaderboardEntry[]): void {
+        if (!label) {
+            return;
+        }
+
+        if (!entries || entries.length === 0) {
+            label.string = `${title} RANKING\nNO RECORDS`;
+            return;
+        }
+
+        const lines = [`${title} RANKING`];
+        for (let i = 0; i < entries.length; i++) {
+            const entry = entries[i];
+            lines.push(`${i + 1}. ${this.trimName(entry.playerName)} ${this.padNumber(entry.bestScore, 6)} ${this.formatTime(entry.bestClearTime)}`);
+        }
+        label.string = lines.join('\n');
+    }
+
+    private saveBestRecordToLocal(levelName: string, score: number, clearTime: number): void {
+        const bestScoreKey = `${STORAGE_BEST_SCORE_PREFIX}${levelName}`;
+        const bestTimeKey = `${STORAGE_BEST_TIME_PREFIX}${levelName}`;
+        const bestScore = this.readStoredNumber(bestScoreKey, 0);
+        const bestTime = this.readStoredNumber(bestTimeKey, -1);
+
+        if (score > bestScore) {
+            cc.sys.localStorage.setItem(bestScoreKey, String(score));
+        }
+
+        if (bestTime < 0 || clearTime < bestTime) {
+            cc.sys.localStorage.setItem(bestTimeKey, String(clearTime));
+        }
+    }
+
+    private trimName(name: string): string {
+        const safeName = name || 'Player';
+        return safeName.length > 10 ? `${safeName.substr(0, 10)}` : safeName;
     }
 
     private playBgm(): void {

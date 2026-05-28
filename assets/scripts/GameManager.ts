@@ -1,6 +1,10 @@
+import { syncBestRecordToFirebase } from "./FirebaseManager";
+
 const { ccclass, property } = cc._decorator;
 
 const STORAGE_LAST_LEVEL_SCENE = 'webMario.lastLevelScene';
+const STORAGE_BEST_SCORE_PREFIX = 'webMario.bestScore.';
+const STORAGE_BEST_TIME_PREFIX = 'webMario.bestClearTime.';
 
 @ccclass
 export default class GameManager extends cc.Component {
@@ -142,6 +146,7 @@ export default class GameManager extends cc.Component {
         }
 
         this.isGameOver = true;
+        this.saveBestRecord();
         this.playEffect(this.levelClearSfx);
         this.scheduleOnce(() => cc.director.loadScene(this.levelClearScene || this.startScene), 1);
     }
@@ -183,6 +188,45 @@ export default class GameManager extends cc.Component {
         if (this.gameOverPanel) {
             this.gameOverPanel.active = true;
         }
+    }
+
+    private saveBestRecord(): void {
+        const levelName = cc.director.getScene().name;
+        const clearTime = Math.max(0, this.levelTime - this.timeLeft);
+        this.saveBestRecordToLocal(levelName, this.score, clearTime);
+
+        syncBestRecordToFirebase(levelName, this.score, clearTime)
+            .then((record) => {
+                if (record) {
+                    this.saveBestRecordToLocal(record.levelName, record.bestScore, record.bestClearTime);
+                }
+            })
+            .catch((error) => cc.warn(`[GameManager] Failed to sync best record: ${error && error.message ? error.message : error}`));
+    }
+
+    private saveBestRecordToLocal(levelName: string, score: number, clearTime: number): void {
+        const bestScoreKey = `${STORAGE_BEST_SCORE_PREFIX}${levelName}`;
+        const bestTimeKey = `${STORAGE_BEST_TIME_PREFIX}${levelName}`;
+        const bestScore = this.readStoredNumber(bestScoreKey, 0);
+        const bestTime = this.readStoredNumber(bestTimeKey, -1);
+
+        if (score > bestScore) {
+            cc.sys.localStorage.setItem(bestScoreKey, String(score));
+        }
+
+        if (bestTime < 0 || clearTime < bestTime) {
+            cc.sys.localStorage.setItem(bestTimeKey, String(clearTime));
+        }
+    }
+
+    private readStoredNumber(key: string, fallback: number): number {
+        const rawValue = cc.sys.localStorage.getItem(key);
+        if (rawValue === null || rawValue === undefined || rawValue === '') {
+            return fallback;
+        }
+
+        const value = Number(rawValue);
+        return isNaN(value) ? fallback : value;
     }
 
     private updateHud(): void {
